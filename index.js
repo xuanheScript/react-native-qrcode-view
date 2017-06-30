@@ -1,89 +1,123 @@
+var JSQR = require('javascript-qrcode');
+
 import React, { Component } from 'react';
 import {
-  Text,
-  View ,
-  Dimensions ,
-  Vibration ,
-  Animated ,
-  Easing ,
-  Alert
+  AppRegistry,
+  StyleSheet,
+  View,
 } from 'react-native';
-import Camera from 'react-native-camera';
-export default class ScanQRView extends Component {
-    static propTypes = {
-        scanColor: React.PropTypes.string,
-        scanRectWidth: React.PropTypes.number,
-    }
-    static defaultProps = {
-        scanColor: '#1dacf9',
-        scanRectWidth : 200,
-    }
-  constructor(props){
-      super(props) ;
-    this.state={
-      scanTranslte:new Animated.Value(0)
-    }
-  }
-  componentDidMount(){
 
-    this.scanLineAnimation();
-  }
-  scanLineAnimation(){
-      const {
-          scanRectWidth,
-      } = this.props
-    Animated.sequence([
-      Animated.timing(this.state.scanTranslte,{toValue:scanRectWidth , duration:3000 , easing:Easing.linear}),
-      Animated.timing(this.state.scanTranslte,{toValue:0 , duration:3000 , easing:Easing.linear})
-                       ]).start(()=>this.scanLineAnimation()) ;
-  }
-  componentWillUnmout(){
-    this.camera&&this.camera.shouldQR();
-  }
-  onBarCodeRead(result){
-    Vibration.vibrate();
-    if(this.props.onBarCodeRead)
+
+var QRCodeView = React.createClass(
+{
+  getDefaultProps : function()
+  {
+    return {
+      data : "",
+      positiveColor : 'black',
+      negativeColor : 'white',
+      dimension : 200,
+    }
+  },
+
+  getInitialState : function()
+  {
+    return {
+      qrRendered : [[]],
+    }
+  },
+
+  componentDidMount : function()
+  {
+    if( this.props.data.length > 0 )
     {
-        this.props.onBarCodeRead(result , ()=>{this.camera.shouldQR();});
+      this.setData(this.props.data);
     }
-    else
-      Alert.alert( "扫描结果" , result.data , [{text:"ok" , onPress:()=>this.camera&&this.camera.shouldQR()}] , {cancelable:false}) ;
+  },
 
-  }
-  render() {
-      const {
-          scanColor,
-          scanRectWidth,
-      } = this.props
-    let width = Dimensions.get('window').width ;
-    let height = Dimensions.get('window').height ;
-    let scanCoverColor = '#44444488' ;
+  _data : "",
+  setData : function(newData)
+  {
+    if( newData == this._data ) return;
+
+    this._data = newData;
+
+    var qrcode = new JSQR.QrCode(this._data);
+    var matrix = qrcode.getData();
+    var posCol = this.props.positiveColor;
+    var negCol = this.props.negativeColor;
+
+    var blockDim = Math.floor(this.props.dimension/matrix.length);
+    var startIndex = -1;
+    var qrRendered = <View style={[styles.container]}>
+      {
+        matrix.map(function(row, index)
+        {
+          return (
+            <View key={index} style={[styles.row, {height:blockDim}]}>
+              {
+
+                row.map(function(value, column)
+                {
+                  if( startIndex < 0 ) startIndex = column;
+
+                  // check if the next column is the same
+                  var isLastColumn = column >= row.length-1;
+                  var nextColumnValueSame = !isLastColumn && (value == row[column+1]);
+                  if( nextColumnValueSame )
+                  {
+                    return null; // dont do anything
+                  }
+                  else
+                  {
+                    var thisStartIndex = startIndex;
+                    var numBlocks = column - startIndex + 1;
+                    startIndex = -1;
+                    return (<View key={index + "-" + column} style={[styles.block,{width:blockDim*numBlocks, height:blockDim, backgroundColor:value == '1' ? posCol : negCol}]} />)
+                  }
+
+                })
+              }
+            </View>
+          )
+        })
+      }
+    </View>;
+
+    this.setState({qrRendered:qrRendered});
+  },
+
+  render: function()
+  {
     return (
-      <View style={{flex:1}}>
-        <Camera
-          style={{width:width , height:height}}
-          type={Camera.constants.Type.back}
-          ref={(cam) => {
-            this.camera = cam;
-          }}
-          onBarCodeRead={this.onBarCodeRead.bind(this)}
-          />
-        <View
-          style={{position:'absolute' , left:0 , right:0, top:0 , bottom:0}}
-          >
-          <View style={{flex:1, backgroundColor:scanCoverColor}}/>
-              <View style={{width:width , height:scanRectWidth ,flexDirection:'row'}}>
-                <View style={{flex:1,backgroundColor:scanCoverColor}}/>
-                <View style={{width:scanRectWidth,borderWidth:1,borderColor:'#fff'}}>
-                  <Animated.View style={{width:scanRectWidth , height:2 , backgroundColor:scanColor , transform:[
-                                         {translateY:this.state.scanTranslte}
-                                       ] }}/>
-                </View>
-                <View style={{flex:1 , backgroundColor:scanCoverColor}}/>
-              </View>
-          <View style={{flex:1 , width:width , backgroundColor:scanCoverColor}}/>
-        </View>
+      <View ref='container' style={this.props.style}>
+        {this.state.qrRendered}
       </View>
     );
   }
-}
+});
+
+var styles = StyleSheet.create({
+  container:{
+    flex: 1,
+    alignItems: 'stretch',
+    flexDirection: 'column',
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  block: {
+  },
+  instructionContainer: {
+    backgroundColor:'blue',
+  },
+  instructionText: {
+    fontSize: 22,
+    margin:10,
+  },
+  backgroundView: {
+    position: 'absolute',
+  },
+});
+
+module.exports = QRCodeView;
